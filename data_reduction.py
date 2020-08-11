@@ -49,8 +49,9 @@ class BinaryConvert:
     """
     def __init__(self):
         self.mkid_exclude = []
-        self.idMKIDs_use = []
+        self.idMKIDs_use = self.num_of_pixels()
         self.len_chunks = []
+
         print(f"{bcolors.BOLD}Welcome!{bcolors.ENDC}")
         print(f"Start by defining a path to the folder with the MKID readout data using {bcolors.RED}select_files(){bcolors.ENDC} method")
 
@@ -127,14 +128,14 @@ class BinaryConvert:
         self.num_of_pixels(len(data)) # automatically creates num pixels
         return data
 
-    def num_of_pixels(self, num):
+    def num_of_pixels(self, num=101):
         """
         num: the number of pixels in the dataset
 
         create a list of pixels to be used internally, does not return anything.
         If not defined, exclusively, will use the length of data as number of pixels.
         """
-        self.idMKIDs_use = np.arange(1, num+1, 1)
+        return np.arange(1, num+1, 1)
 
 
 
@@ -445,3 +446,127 @@ class BinaryConvert:
             else:
                 final = np.concatenate([final, result_masked_pca], axis=1)
         return final
+
+# ------------------ Calibration --------------------
+
+    def load_frequency(self):
+        """
+        loads and returns frequency file
+        """
+
+        try:
+            freq = np.loadtxt("frequencies.txt")
+        except FileNotFoundError:
+            print("File \'frequencies.txt\' not found! create it using identify_frequencies, with save=True")
+
+        return freq
+
+    def find_source_frequency(self, data, minimaorder):
+        """
+        data: The decorrelated data, with the source being the lowest point in the observation
+
+        returns the frequency at the brightest point of the source observation(lowest)
+        """
+        f_bright = []
+        # find the lowest point.
+
+        # TODO: Make this parallel
+
+        for i in range(len(data)):
+            l1 = data[i]
+            minima_index, minima = self.minima_func(l1, minimaorder)
+            #     print(minima_index, minima)
+            f_brightest = heapq.nsmallest(1, minima)[-1]
+            f_bright.append([i + 1, f_brightest])
+        print(f_bright)
+        #find the matching pixel id.
+        pix_bright = []
+        index = []
+
+        for idMKID in self.idMKIDs_use:
+            if idMKID not in self.mkid_exclude:
+                index.append(idMKID)
+
+        for i in range(len(f_bright)):
+            pix_bright.append([index[i], f_bright[i][1]])
+
+        return pix_bright
+
+    def antenna_temperature(self, frequency_table, pix_fbright, t_atm, plot=False):
+        """
+        frequency_table: the frequency file generated using "identify_frequencies"
+        frequency_brightest: ferq and f_brightest created using find_source_frequency
+        t_atm: the atmospheric temperature that day
+
+        returns the pixel-id and antenna temperature.
+        """
+        t_a = []
+        f_load_av = []
+
+        for k in range(len(pix_fbright)):
+            index = pix_fbright[k][0]
+            #     print(index)
+            j = int(index - 1)
+            f_load = np.mean([frequency_table[j][-1], frequency_table[j][-2]])
+            f_load_av.append(f_load)
+            if f_load != 0:
+                print(j, f_load)
+                print(k)
+                t_a.append([index, -t_atm * (pix_fbright[k][1] / f_load)])
+
+        t_a = np.array(t_a)
+
+        if plot:
+            plt.rcParams['figure.figsize'] = [10, 6]
+
+            plt.title("T_a* plot")
+            plt.plot(t_a[:, 0], t_a[:, 1], "o", c='r')
+            plt.hlines(np.average(t_a[:, 1]), xmin=0, xmax=np.amax(t_a[:, 0]), label="average :{: .2f} K".format(np.average(t_a[:, 1])))
+            plt.xlabel("pixels")
+            plt.ylabel("Antenna temperature (K)")
+            plt.legend()
+            plt.show()
+        return t_a
+
+
+
+    def _planck(self, nu, T):
+        h = 6.626e-34
+        # c = 3.0e+8
+        k = 1.38e-23
+
+        a = (h * nu) / k
+        b = (np.exp((h * nu) / (k * T)) - 1)
+        intensity = a / b
+        return intensity
+
+    def _main_beam_efficiency(self, ta_star, nu, t_source, theta_eq, theta_pol, theta_mb):
+
+        #     mb_eff = Ta_star / ( T_source * (1 - np.exp(-np.log(2)*((theta_eq * theta_pol)/theta_mb))))
+
+        mb_eff = (0.5 * ta_star) / ((self._planck(nu, t_source) - self._planck(nu, 2.28)) * (
+                    1 - np.exp(-np.log(2) * ((theta_eq * theta_pol) / theta_mb ** 2))))
+
+        return mb_eff
+
+    def get_main_beam_efficiency(self, ta_star, nu, t_source, theta_eq, theta_pol, theta_mb, plot=False):
+        eta_mb = []
+
+        for i in range(len(ta_star)):
+            eta_mb.append([ta_star[i][0], self._main_beam_efficiency(ta_star[i][1], nu, t_source, theta_eq, theta_pol, theta_mb)])
+
+        eta_mb = np.array(eta_mb)
+        eta_mb[:, 1] = eta_mb[:, 1] * 100
+
+        if plot:
+            plt.rcParams['figure.figsize'] = [10, 6]
+
+            plt.title("$\eta_{\mathrm{mb}}$ plot")
+            plt.plot(eta_mb[:, 0],eta_mb[:, 1], "o")
+            plt.hlines(np.average(eta_mb[:, 1]), xmin=0, xmax=np.amax(eta_mb[:, 0]), label="average :{: .2f} %".format(np.average(eta_mb[:, 1])))
+            plt.xlabel("pixels")
+            plt.ylabel("Main Beam efficiency")
+            plt.legend()
+            plt.show()
+
+        return eta_mb

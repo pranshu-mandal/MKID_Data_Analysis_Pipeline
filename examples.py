@@ -11,7 +11,7 @@ import data_reduction as dr
 
 bc = dr.BinaryConvert()  # Call the object
 # mkid_files = bc.select_files() # Select the MKID readout files
-# bc.save_fsp_pickle(mkid_files, "Mars_0601.pickle") # to average and save the fsp files to a single binary file.
+# bc.save_fsp_pickle(mkid_files, "Mars_0601") # to average and save the fsp files to a single binary file.
 
 # data = bc.load_pickle("Mars_0601.pickle")
 
@@ -20,8 +20,8 @@ bc = dr.BinaryConvert()  # Call the object
 #     bc.plot(data, i+1)
 #########################################
 
-# exclude = [48, 71, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 89, 90, 91, 92, 93, 94, 95, 98, 99]
-# bc.pixels_to_exclude(exclude) # to exclude these pixels from further calculations.
+exclude = [48, 71, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 89, 90, 91, 92, 93, 94, 95, 98, 99]
+bc.pixels_to_exclude(exclude) # to exclude these pixels from further calculations.
 
 # freq = bc.identify_frequencies(data, 4000, exclude=True, plot=False, save_file=True)
 
@@ -88,7 +88,13 @@ bc = dr.BinaryConvert()  # Call the object
 
 cleaned = bc.load_pickle("final_flat.pickle")
 
-plt.plot(cleaned[0], )
-plt.show()
+# plt.plot(cleaned[0], )
+# plt.show()
 
-freq = np.loadtxt("frequencies.txt")
+freq = bc.load_frequency()
+pix_bright = bc.find_source_frequency(cleaned, minimaorder=4000)
+
+antenna_temp = bc.antenna_temperature(freq, pix_bright, 281, plot=True)
+print(antenna_temp)
+
+eta_mb = bc.get_main_beam_efficiency(antenna_temp, 1e+11, 216, 15.3, 15.3, 17, plot=True)

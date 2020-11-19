@@ -297,6 +297,13 @@ class BinaryConvert:
 
 # ------------------ Decorrelation --------------------
 
+    def mkids_used(self):
+        used = []
+        for idMKID in self.idMKIDs_use:
+            if idMKID not in self.mkid_exclude:
+                used.append(idMKID)
+        return used
+
     def clip(self, data, starting_index, ending_index):
         """
         Clips the data for decorrealtion
@@ -492,11 +499,12 @@ class BinaryConvert:
 
         return pix_bright
 
-    def antenna_temperature(self, frequency_table, pix_fbright, t_atm, plot=False):
+    def antenna_temperature(self, frequency_table, pix_fbright, t_atm, exclude, plot=False):
         """
         frequency_table: the frequency file generated using "identify_frequencies"
         frequency_brightest: ferq and f_brightest created using find_source_frequency
         t_atm: the atmospheric temperature that day
+        exclude: 1darray of elements filtered by beamsize
 
         returns the pixel-id and antenna temperature.
         """
@@ -504,26 +512,29 @@ class BinaryConvert:
         f_load_av = []
 
         for k in range(len(pix_fbright)):
+
             index = pix_fbright[k][0]
-            #     print(index)
-            j = int(index - 1)
-            f_load = np.mean([frequency_table[j][-1], frequency_table[j][-2]])
-            f_load_av.append(f_load)
-            if f_load != 0:
-                print(j, f_load)
-                print(k)
-                t_a.append([index, -t_atm * (pix_fbright[k][1] / f_load)])
+            if index not in exclude:
+                #     print(index)
+                j = int(index - 1)
+                f_load = np.mean([frequency_table[j][-1], frequency_table[j][-2]])
+                f_load_av.append(f_load)
+                if f_load != 0:
+                    # print(j, f_load)
+                    # print(k)
+                    t_a.append([index, -t_atm * (pix_fbright[k][1] / f_load)])
 
         t_a = np.array(t_a)
 
         if plot:
             plt.rcParams['figure.figsize'] = [10, 6]
 
-            plt.title("T_a* plot")
+            plt.title("$T_a^*$ plot")
             plt.plot(t_a[:, 0], t_a[:, 1], "o", c='r')
             plt.hlines(np.average(t_a[:, 1]), xmin=0, xmax=np.amax(t_a[:, 0]), label="average :{: .2f} K".format(np.average(t_a[:, 1])))
-            plt.xlabel("pixels")
+            plt.xlabel("elements")
             plt.ylabel("Antenna temperature (K)")
+            plt.ylim(0,50)
             plt.legend()
             plt.show()
         return t_a
@@ -542,18 +553,22 @@ class BinaryConvert:
 
     def _main_beam_efficiency(self, ta_star, nu, t_source, theta_eq, theta_pol, theta_mb):
 
-        #     mb_eff = Ta_star / ( T_source * (1 - np.exp(-np.log(2)*((theta_eq * theta_pol)/theta_mb))))
+        mb_eff = ta_star / (t_source * (1 - np.exp(-np.log(2)*((theta_eq * theta_pol)/(theta_mb**2)))))
 
-        mb_eff = (0.5 * ta_star) / ((self._planck(nu, t_source) - self._planck(nu, 2.28)) * (
-                    1 - np.exp(-np.log(2) * ((theta_eq * theta_pol) / theta_mb ** 2))))
+        # mb_eff = (0.5 * ta_star) / ((self._planck(nu, t_source) - self._planck(nu, 2.28)) * (
+        #             1 - np.exp(-np.log(2) * ((theta_eq * theta_pol) / (theta_mb ** 2)))))
 
         return mb_eff
 
-    def get_main_beam_efficiency(self, ta_star, nu, t_source, theta_eq, theta_pol, theta_mb, plot=False):
+    def get_main_beam_efficiency(self, ta_star, nu, t_source, theta_eq, theta_pol, beamsize, plot=False):
         eta_mb = []
+        beamsize = np.array(beamsize)
+        print(len(ta_star))
+        print(len(beamsize))
 
         for i in range(len(ta_star)):
-            eta_mb.append([ta_star[i][0], self._main_beam_efficiency(ta_star[i][1], nu, t_source, theta_eq, theta_pol, theta_mb)])
+
+            eta_mb.append([ta_star[i][0], self._main_beam_efficiency(ta_star[i][1], nu, t_source, theta_eq, theta_pol, beamsize[i][1])])
 
         eta_mb = np.array(eta_mb)
         eta_mb[:, 1] = eta_mb[:, 1] * 100
@@ -564,8 +579,43 @@ class BinaryConvert:
             plt.title("$\eta_{\mathrm{mb}}$ plot")
             plt.plot(eta_mb[:, 0],eta_mb[:, 1], "o")
             plt.hlines(np.average(eta_mb[:, 1]), xmin=0, xmax=np.amax(eta_mb[:, 0]), label="average :{: .2f} %".format(np.average(eta_mb[:, 1])))
-            plt.xlabel("pixels")
+            plt.xlabel("elements")
             plt.ylabel("Main Beam efficiency")
+            plt.ylim(0,60)
+            plt.legend()
+            plt.show()
+
+        return eta_mb
+
+    def aperture_efficiency(self, etamb, beamsize, wavelength=0.00285517, D=45, plot = True):
+
+        """
+        etamb: etamb from main beam effieciency output
+        wavelength: wavelength of observation
+        Ap: Aperture area
+        """
+        tmb = []
+
+        for i in range(len(etamb)):
+
+            val = ((etamb[i][1]/100) / ((((beamsize[i][1] * np.pi)/(180*3600))**2) * 0.8899 * ((D**2)/(wavelength**2))))
+            # val = ((D**2)/(wavelength**2))
+
+
+            tmb.append([etamb[i][0], val])
+
+        tmb = np.array(tmb)
+        tmb[:, 1] = tmb[:, 1] * 100
+
+        if plot:
+            plt.rcParams['figure.figsize'] = [10, 6]
+
+            plt.title("$\eta_{\mathrm{A}}$ plot")
+            plt.plot(tmb[:, 0],tmb[:, 1], "o", c="purple")
+            plt.hlines(np.average(tmb[:, 1]), xmin=0, xmax=np.amax(tmb[:, 0]), label="average :{: .2f} %".format(np.average(tmb[:, 1])))
+            plt.xlabel("elements")
+            plt.ylabel("Aperture efficiency")
+            plt.ylim(0,40)
             plt.legend()
             plt.show()
 

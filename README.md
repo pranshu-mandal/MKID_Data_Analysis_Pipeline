@@ -93,5 +93,24 @@ Now run,
 
     chunk_matrix = bc.make_chunk_matrix(mask, num_chunks=400)
 
+To see the Chunk matrix, and see if the number of chunks are appropriate, Run.
+
+    plt.imshow(chunk_matrix)
+    plt.colorbar()
+    plt.show()
+
+Now to do the decorrelation using ChunkPCA, use
+
+    final = bc.chunkpca_decor(mask, chunk_matrix, mean_sub)
+
+And, to see the decorrelated data as an array, run 
+
+    final_flat = bc.flatten(final, 0)
+
+Let us save this data using
+
+    bc.save_as_pickle(final_flat, "final_flat_selected_by_beamsize")
+
+
 
 

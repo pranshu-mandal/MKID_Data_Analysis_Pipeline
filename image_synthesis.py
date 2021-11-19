@@ -51,6 +51,7 @@ class SingleMKIDmapper():
         offset = settings["intensity_offset"]  # the value to allign the position log with the correct position log.
         maptype = settings["map_type"]
         crop = []
+        sampling_rate = settings["sampling_rate"]
 
         if settings["scan_size"] == "auto":
             print("scan is auto")
@@ -67,7 +68,7 @@ class SingleMKIDmapper():
 
         ra, dec, index_cropped = imaging.position_import(antlog=position_log, maptype=maptype,
                                                          manual_selection=manual_selection,
-                                                         crop=crop)
+                                                         crop=crop, sampling_rate=sampling_rate)
         intensity = imaging.intensity_import(f, index_cropped=index_cropped, offset=offset, normalize=True)
 
 

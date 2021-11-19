@@ -408,13 +408,14 @@ def pos_import_offset(antlog, maptype, manual_selection, crop, offset_x, offset_
 
 
 
-def position_import(antlog, maptype, manual_selection, crop):
+def position_import(antlog, maptype, manual_selection, crop, sampling_rate):
 
     """
     Calculates several coordinate related values from the antenna log. Converted to python from the code written in
     C sent by Nagai-san.
 
     :param antlog: antenna log file from the telescope
+    sampling_rate: the number of samples in the intensity per second
     :return: RA-Dec, dAz-dEl, etc.
 
     Improvements to be made: Commandline selection of the output, maybe by an "if".
@@ -586,7 +587,7 @@ def position_import(antlog, maptype, manual_selection, crop):
     # ## INTERPOLATING RA DEC SEPARATELY #######
 
 
-    sampling_rate = 16*4
+    sampling_rate = sampling_rate
     b = len(realradecf0)
     rem = b % 5   # 5 samples for half a second. ( 10 per second)
 

@@ -49,7 +49,7 @@ class BinaryConvert:
     """
     def __init__(self):
         self.mkid_exclude = []
-        self.idMKIDs_use = self.num_of_pixels()
+        self.idMKIDs_use = []
         self.len_chunks = []
 
         print(f"{bcolors.BOLD}Welcome!{bcolors.ENDC}")
@@ -77,8 +77,19 @@ class BinaryConvert:
         print('File {} has been averaged'.format(filename))
         return data_av
 
+    def read_single_col(self, filename, col=1):
+        """
+        filename: file index.
 
-    def save_fsp_pickle(self, fsp_files, filename):
+        Reads and returns the value from a column of a file
+        """
+
+        data = ascii.read(filename)
+        data = [row[col] for row in data]
+        print("File {} has been read".format(filename))
+        return data
+
+    def save_fsp_pickle(self, fsp_files, filename, mode="average"):
 
         # TODO: Add antlog and obs, time shift files as well into Xarray format.
 
@@ -91,11 +102,15 @@ class BinaryConvert:
 
         average_values = []
 
-        with concurrent.futures.ProcessPoolExecutor() as executor:
-            for prime in executor.map(self.average_sweeps, fsp_files):
-                average_values.append(prime)
+        if mode=="average":
+            with concurrent.futures.ProcessPoolExecutor() as executor:
+                for prime in executor.map(self.average_sweeps, fsp_files):
+                    average_values.append(prime)
 
-
+        if mode =="single_col":
+            with concurrent.futures.ProcessPoolExecutor() as executor:
+                for prime in executor.map(self.read_single_col, fsp_files):
+                    average_values.append(prime)
 
         with open(str(filename)+'.pickle', 'wb') as handle:
             pickle.dump(average_values, handle, protocol=pickle.HIGHEST_PROTOCOL)
@@ -125,10 +140,10 @@ class BinaryConvert:
         with open(str(filename), 'rb') as handle:
             data = pickle.load(handle)
 
-        self.num_of_pixels(len(data)) # automatically creates num pixels
+        self.idMKIDs_use = self.num_of_pixels(num=len(data)) # automatically creates num pixels
         return data
 
-    def num_of_pixels(self, num=101):
+    def num_of_pixels(self, num):
         """
         num: the number of pixels in the dataset
 
@@ -168,7 +183,7 @@ class BinaryConvert:
 
 # ------------------  FREQUENCY IDENTIFICATION CODE--------------------
 
-    def identify_frequencies(self, data, minima_order=4000, exclude=True, plot=False, save_file=True):
+    def identify_frequencies(self, data, minima_order=4000, exclude=True, plot=False, save_file=True, file_path="./"):
         """
         data: is the TOD of frequency shift including the Hot-Rod reading.
 
@@ -214,7 +229,7 @@ class BinaryConvert:
                 frequencies.append(f)
 
         if save_file:
-            np.savetxt('frequencies.txt', frequencies, fmt='%s')
+            np.savetxt((file_path + 'frequencies.txt'), frequencies, fmt='%s')
             print("the Frequencies have been saved into a file titled \"Frequencies.txt\"")
         return frequencies
 
@@ -247,18 +262,15 @@ class BinaryConvert:
 
     def average(self, data, value):
         l = len(data)
-        print
-        'total number of data points are', l
+        print('total number of data points are', l)
+
         ############Reducing the data points by taking average-----------------------
         ml = divmod(l, value)
-        print
-        'to make an average over 100 data point,', ml[1], 'data from the end are rejected'
+        print('to make an average over 100 data point,', ml[1], 'data from the end are rejected')
         data = data[:-ml[1]]
         x = np.array(data)
         nx = np.mean(x.reshape(-1, value), axis=1)  # averages it out over 100 points
-        print
-        'the total data points after averaging are', len(nx)
-
+        print('the total data points after averaging are', len(nx))
         return nx
 
 
